@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { LED_SPECS } from '../sim/parts'
 import type { LedColor } from '../sim/types'
 import { Lead, METAL, Rod, useLabelTexture } from './common'
+import { DevBoard } from './props'
 
 // Procedural component models. Convention: bodies sit around y = 0…1.6 and
 // legs point down towards y ≈ −1, centred on x = 0. Hotspot coordinates in
@@ -408,6 +409,38 @@ export function FuseModel() {
   )
 }
 
+export function PotModel() {
+  const tex = useLabelTexture('103', { bg: '#1d4ed8', fg: '#e0e7ff', font: '700 44px JetBrains Mono, monospace' })
+  return (
+    <group>
+      {[-0.32, 0, 0.32].map((x) => (
+        <Lead key={x} points={[[x, 0.05, 0.25], [x, -1.0, 0.25]]} />
+      ))}
+      <mesh position={[0, 0.28, 0]} castShadow>
+        <boxGeometry args={[1.05, 0.5, 1.05]} />
+        <meshStandardMaterial color="#1d4ed8" roughness={0.45} />
+      </mesh>
+      <mesh position={[0, 0.28, 0.535]}>
+        <planeGeometry args={[0.62, 0.31]} />
+        <meshStandardMaterial map={tex} />
+      </mesh>
+      <mesh position={[0, 0.62, 0]} castShadow>
+        <cylinderGeometry args={[0.4, 0.42, 0.22, 40]} />
+        <meshStandardMaterial color="#e5e7eb" roughness={0.4} />
+      </mesh>
+      <mesh position={[0, 0.98, 0]} castShadow>
+        <cylinderGeometry args={[0.26, 0.28, 0.55, 32]} />
+        <meshStandardMaterial color="#f8fafc" roughness={0.35} />
+      </mesh>
+      {/* pointer line showing where the wiper is */}
+      <mesh position={[0.1, 1.26, -0.06]} rotation={[0, Math.PI / 4, 0]}>
+        <boxGeometry args={[0.34, 0.02, 0.05]} />
+        <meshStandardMaterial color="#0f172a" />
+      </mesh>
+    </group>
+  )
+}
+
 export const MODEL_BY_ID: Record<string, ComponentType> = {
   battery: () => <BatteryModel />,
   resistor: () => <ResistorModel ohms={470} />,
@@ -422,4 +455,10 @@ export const MODEL_BY_ID: Record<string, ComponentType> = {
   connector: ConnectorModel,
   fuse: FuseModel,
   regulator: () => <To220Model label="L7805" />,
+  potentiometer: PotModel,
+  microcontroller: () => (
+    <group position={[0, -0.35, 0]}>
+      <DevBoard ledOn />
+    </group>
+  ),
 }

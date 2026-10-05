@@ -126,6 +126,7 @@ const RANKS = [
   { xp: 650, name: 'Parts collector' },
   { xp: 900, name: 'Circuit builder' },
   { xp: 1300, name: 'Bench engineer' },
+  { xp: 1550, name: 'Firmware tinkerer' },
 ]
 
 export function rankFor(xp: number) {

@@ -16,6 +16,7 @@ const GROUP_LABEL: Record<CatalogComponent['group'], string> = {
   switching: 'Switching',
   connection: 'Connections',
   protection: 'Protection',
+  computing: 'Computing',
 }
 
 export function ComponentsHub() {

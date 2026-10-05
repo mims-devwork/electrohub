@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { LabWorkspace } from '../circuit/LabWorkspace'
 import { useCircuit } from '../circuit/useCircuit'
 import { EXPERIMENT_BY_ID, HUB_BY_ID, LEVEL_BY_N } from '../content'
-import type { Experiment } from '../content/types'
+import type { CircuitExperiment, Experiment, MicroExperiment } from '../content/types'
+import { emptyButtonLed, emptyMicroHistory, microGoalMet, updateMicroHistory, type MicroHistory } from '../micro/goals'
+import { MicroWorkspace } from '../micro/MicroWorkspace'
+import { useMicro } from '../micro/useMicro'
 import { isLevelComplete, isLevelUnlocked, nextAction } from '../lib/progression'
 import { emptyHistory, goalMet, updateHistory, type GoalHistory } from '../sim/goals'
 import { formatAmps } from '../sim/parts'
@@ -19,42 +22,47 @@ export function ExperimentPage() {
   const exp = EXPERIMENT_BY_ID[id]
   if (!exp) return <NotFoundBlock what="experiment" />
   if (exp.status !== 'ready') return <PlannedExperiment exp={exp} />
+  if (exp.bench === 'micro') return <MicroExperimentRunner key={exp.id} exp={exp} />
   return <ExperimentRunner key={exp.id} exp={exp} />
 }
 
 const num = (n: number) => String(n).padStart(2, '0')
 
-function ExperimentRunner({ exp }: { exp: Experiment }) {
-  const snap = useSnapshot()
+/** Which lab an experiment's bench belongs to. */
+const benchHub = (exp: Experiment) => (exp.bench === 'micro' ? HUB_BY_ID.microcontrollers : HUB_BY_ID.circuits)
+
+/** Step bookkeeping shared by every kind of bench. */
+function useSteps(exp: Experiment) {
   const complete = useProgress((s) => s.complete)
-  const navigate = useNavigate()
-  const api = useCircuit(exp.setup)
   const [stepIdx, setStepIdx] = useState(0)
-  const [metSteps, setMetSteps] = useState<Set<number>>(new Set())
-  const [history, setHistory] = useState<GoalHistory>(emptyHistory)
-  const [showHint, setShowHint] = useState(false)
-  const [peek, setPeek] = usePeeking(exp.levelN)
-  const hub = HUB_BY_ID.circuits
-  const level = LEVEL_BY_N[exp.levelN]
   const finished = stepIdx >= exp.steps.length
-  const step = exp.steps[Math.min(stepIdx, exp.steps.length - 1)]
-
-  useEffect(() => {
-    setHistory((h) => updateHistory(h, api.circuit, api.sim))
-  }, [api.circuit, api.sim])
-
-  const met = metSteps.has(stepIdx) || (!finished && goalMet(step.goal, api.circuit, api.sim, history))
-  useEffect(() => {
-    if (met && !metSteps.has(stepIdx)) setMetSteps((s) => new Set(s).add(stepIdx))
-  }, [met, metSteps, stepIdx])
 
   useEffect(() => {
     if (finished) complete(`experiment:${exp.id}`, exp.xp)
   }, [finished, complete, exp])
 
+  return { stepIdx, current: Math.min(stepIdx, exp.steps.length - 1), finished, next: () => setStepIdx((i) => i + 1) }
+}
+
+/** Once a step's goal has been reached it stays reached, even if the bench changes afterwards. */
+function useStepGoal(stepIdx: number, finished: boolean, metNow: boolean) {
+  const [metSteps, setMetSteps] = useState<Set<number>>(new Set())
+  const met = metSteps.has(stepIdx) || (!finished && metNow)
+  useEffect(() => {
+    if (met && !metSteps.has(stepIdx)) setMetSteps((s) => new Set(s).add(stepIdx))
+  }, [met, metSteps, stepIdx])
+  return met
+}
+
+/** Header + lock check around any experiment bench. */
+function ExperimentFrame({ exp, finished, children }: { exp: Experiment; finished: boolean; children: ReactNode }) {
+  const snap = useSnapshot()
+  const [peek, setPeek] = usePeeking(exp.levelN)
+  const hub = benchHub(exp)
+  const level = LEVEL_BY_N[exp.levelN]
   const header = (
     <PageHeader
-      crumbs={[{ label: hub.name, to: '/hub/circuits' }, { label: `Level ${level.n}`, to: '/map' }, { label: `Experiment ${num(exp.number)}` }]}
+      crumbs={[{ label: hub.name, to: `/hub/${hub.id}` }, { label: `Level ${level.n}`, to: '/map' }, { label: `Experiment ${num(exp.number)}` }]}
       title={`Experiment ${num(exp.number)}: ${exp.title}`}
       learning={exp.summary}
       icon={hub.icon}
@@ -62,7 +70,6 @@ function ExperimentRunner({ exp }: { exp: Experiment }) {
       hideNext={!finished}
     />
   )
-
   if (!isLevelUnlocked(exp.levelN, snap) && !peek) {
     return (
       <>
@@ -71,13 +78,21 @@ function ExperimentRunner({ exp }: { exp: Experiment }) {
       </>
     )
   }
+  return (
+    <div className="pb-16">
+      {header}
+      <div className="mx-auto max-w-[1400px] px-4 pt-5">{children}</div>
+    </div>
+  )
+}
 
-  const isAck = step.goal.type === 'acknowledge'
-  const canAdvance = isAck || met
+function FinishedPanel({ exp, freeBuild }: { exp: Experiment; freeBuild: { to: string; label: string } }) {
+  const snap = useSnapshot()
+  const navigate = useNavigate()
+  const level = LEVEL_BY_N[exp.levelN]
   const next = nextAction(snap)
   const levelDone = isLevelComplete(level, snap)
-
-  const side = finished ? (
+  return (
     <div className="panel-strong rise-in p-5">
       <div className="text-3xl" aria-hidden>
         {levelDone ? '🔓' : '🧪'}
@@ -98,10 +113,31 @@ function ExperimentRunner({ exp }: { exp: Experiment }) {
         <Button variant="primary" onClick={() => navigate(next.to)}>
           {next.title} →
         </Button>
-        <LinkButton to="/lab/sandbox">Free build</LinkButton>
+        <LinkButton to={freeBuild.to}>{freeBuild.label}</LinkButton>
       </div>
     </div>
-  ) : (
+  )
+}
+
+function StepPanel({
+  exp,
+  stepIdx,
+  met,
+  onNext,
+  children,
+}: {
+  exp: Experiment
+  stepIdx: number
+  met: boolean
+  onNext: () => void
+  /** Extra step-specific content, shown under the instructions. */
+  children?: ReactNode
+}) {
+  const [showHint, setShowHint] = useState(false)
+  const step = exp.steps[stepIdx]
+  const isAck = step.goal.type === 'acknowledge'
+  const canAdvance = isAck || met
+  return (
     <div className="panel-strong p-4">
       <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-fog-400">
         <span>
@@ -126,7 +162,7 @@ function ExperimentRunner({ exp }: { exp: Experiment }) {
           )}
         </div>
       )}
-      {step.id === 'compare' && history.peakLedCurrent > 0 && <BeforeAfter before={history.peakLedCurrent} after={history.lastLedCurrent} />}
+      {children}
       {!isAck && (
         <div className={`mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${met ? 'border-ok/50 bg-ok/10 text-ok' : 'border-ink-600 text-fog-400'}`}>
           <span aria-hidden>{met ? '✓' : '○'}</span>
@@ -146,7 +182,7 @@ function ExperimentRunner({ exp }: { exp: Experiment }) {
           disabled={!canAdvance}
           onClick={() => {
             setShowHint(false)
-            setStepIdx((i) => i + 1)
+            onNext()
           }}
         >
           {stepIdx === exp.steps.length - 1 ? 'Finish experiment' : 'Next step'} →
@@ -154,14 +190,70 @@ function ExperimentRunner({ exp }: { exp: Experiment }) {
       </div>
     </div>
   )
+}
+
+function ExperimentRunner({ exp }: { exp: CircuitExperiment }) {
+  const api = useCircuit(exp.setup)
+  const { stepIdx, current, finished, next } = useSteps(exp)
+  const [history, setHistory] = useState<GoalHistory>(emptyHistory)
+  const step = exp.steps[current]
+
+  useEffect(() => {
+    setHistory((h) => updateHistory(h, api.circuit, api.sim))
+  }, [api.circuit, api.sim])
+
+  const met = useStepGoal(stepIdx, finished, goalMet(step.goal, api.circuit, api.sim, history))
+
+  const side = finished ? (
+    <FinishedPanel exp={exp} freeBuild={{ to: '/lab/sandbox', label: 'Free build' }} />
+  ) : (
+    <StepPanel key={stepIdx} exp={exp} stepIdx={stepIdx} met={met} onNext={next}>
+      {step.id === 'compare' && history.peakLedCurrent > 0 && <BeforeAfter before={history.peakLedCurrent} after={history.lastLedCurrent} />}
+    </StepPanel>
+  )
 
   return (
-    <div className="pb-16">
-      {header}
-      <div className="mx-auto max-w-[1400px] px-4 pt-5">
-        <LabWorkspace api={api} tray={finished ? ['resistor', 'led', 'switch', 'button'] : step.tray} side={side} onReset={() => api.reset(exp.setup)} />
-      </div>
-    </div>
+    <ExperimentFrame exp={exp} finished={finished}>
+      <LabWorkspace api={api} tray={finished ? ['resistor', 'led', 'switch', 'button'] : step.tray} side={side} onReset={() => api.reset(exp.setup)} />
+    </ExperimentFrame>
+  )
+}
+
+function MicroExperimentRunner({ exp }: { exp: MicroExperiment }) {
+  const api = useMicro(exp.setup)
+  const { stepIdx, current, finished, next } = useSteps(exp)
+  const [history, setHistory] = useState<MicroHistory>(emptyMicroHistory)
+  const step = exp.steps[current]
+
+  useEffect(() => {
+    setHistory((h) => updateMicroHistory(h, api.circuit, api.inputs, api.frame))
+  }, [api.circuit, api.inputs, api.frame])
+
+  // What the LED did with old code, or in an earlier step, doesn't count as evidence now.
+  useEffect(() => {
+    setHistory((h) => ({ ...h, buttonLed: emptyButtonLed(), ledMin: 1, ledMax: 0 }))
+  }, [api.uploads, stepIdx])
+
+  const met = useStepGoal(stepIdx, finished, microGoalMet(step.goal, api.circuit, api.inputs, api.frame, history))
+
+  const side = finished ? (
+    <FinishedPanel exp={exp} freeBuild={{ to: '/hub/microcontrollers', label: 'Free play' }} />
+  ) : (
+    <StepPanel key={stepIdx} exp={exp} stepIdx={stepIdx} met={met} onNext={next} />
+  )
+
+  return (
+    <ExperimentFrame exp={exp} finished={finished}>
+      <MicroWorkspace
+        api={api}
+        tray={finished ? ['resistor'] : step.tray}
+        side={side}
+        onReset={() => {
+          api.reset()
+          setHistory(emptyMicroHistory())
+        }}
+      />
+    </ExperimentFrame>
   )
 }
 

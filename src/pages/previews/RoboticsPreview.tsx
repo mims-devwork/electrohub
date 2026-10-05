@@ -200,7 +200,7 @@ export function RoboticsPreview() {
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-3">
         <SectionTitle eyebrow="Preview · Levels 6–9" title="How a robot actually works">
-          Sensor → microcontroller → decision → motor driver → motors, running live. This is Experiment 09, the obstacle-avoiding robot, and you’ll build the electronics for it yourself.
+          Sensor → microcontroller → decision → motor driver → motors, running live. This is Experiment 11, the obstacle-avoiding robot, and you’ll build the electronics for it yourself.
         </SectionTitle>
         <div className="relative h-[440px] overflow-hidden rounded-2xl border border-ink-700">
           <Canvas shadows dpr={[1, 2]} camera={{ position: [0, 7.6, 6.4], fov: 45 }}>

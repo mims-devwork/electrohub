@@ -15,7 +15,7 @@ export function MapPage() {
     <div className="pb-16">
       <PageHeader crumbs={[{ label: 'Learning Map' }]} title="Learning Map" learning="Twelve levels, from “what is electricity?” to designing your own robot’s electronics. Each one unlocks a new ability." />
       <div className="mx-auto grid max-w-[1400px] gap-6 px-4 pt-6 lg:grid-cols-[minmax(0,1fr)_420px]">
-        <ol className="relative space-y-2">
+        <ol className="relative min-w-0 space-y-2">
           <div className="absolute bottom-6 left-[27px] top-6 w-0.5 bg-ink-700" aria-hidden />
           {LEVELS.map((l, i) => {
             const status = levelStatus(l, snap)

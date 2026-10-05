@@ -104,7 +104,8 @@ function Scope({ history }: { history: { d2: number; d13: number }[] }) {
   )
 }
 
-export function MicroPreview() {
+/** Free play: one board, one button, one LED, and two programs to swap between. */
+export function MicroPlayground() {
   const [program, setProgram] = useState<Program>('follow')
   const [pressed, setPressed] = useState(false)
   const [toggled, setToggled] = useState(false)
@@ -133,10 +134,10 @@ export function MicroPreview() {
   const activeTags = program === 'follow' ? ['read', pressed ? 'on' : 'off'] : ['read', pressed ? 'flip' : '', 'write']
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_400px]">
-      <div className="space-y-3">
-        <SectionTitle eyebrow="Preview · Levels 4–5" title="Software controlling hardware">
-          A button is wired to pin 2 and an LED to pin 13. The wires never change, but the program decides what pressing the button actually does.
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="min-w-0 space-y-3">
+        <SectionTitle eyebrow="Free play" title="Software controlling hardware">
+          A button is wired to pin 2 and an LED to pin 13. The wires never change, but the program decides what pressing the button actually does. Swap programs and try it.
         </SectionTitle>
         <div className="relative h-[420px] overflow-hidden rounded-2xl border border-ink-700">
           <Board3D pressed={pressed} ledOn={ledOn} onPress={setPressed} />
@@ -148,8 +149,8 @@ export function MicroPreview() {
           </button>
         </div>
       </div>
-      <div className="space-y-3">
-        <div className="panel p-4">
+      <div className="grid min-w-0 content-start gap-3 sm:grid-cols-2 xl:grid-cols-1">
+        <div className="panel min-w-0 p-4">
           <div className="flex gap-1.5">
             {(Object.keys(PROGRAMS) as Program[]).map((p) => (
               <button

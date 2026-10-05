@@ -1,6 +1,8 @@
 // Learning content is plain data. UI components read these shapes; adding a new
 // lesson, experiment, component or level means adding data, not new screens.
 
+import type { MicroGoal } from '../micro/goals'
+import type { MicroPartKind, MicroSetup } from '../micro/types'
 import type { Goal } from '../sim/goals'
 import type { Circuit, PartKind } from '../sim/types'
 
@@ -59,6 +61,13 @@ export type WidgetId =
   | 'safety-sort'
   | 'color-bands'
   | 'led-legs'
+  | 'signal-scope'
+  | 'logic-threshold'
+  | 'divider'
+  | 'pot-knob'
+  | 'pin-finder'
+  | 'code-stepper'
+  | 'pwm'
 
 export type LessonStep =
   | {
@@ -97,19 +106,19 @@ export interface Lesson {
   steps: LessonStep[]
 }
 
-export interface ExperimentStep {
+export interface ExperimentStep<G = Goal, K = PartKind> {
   id: string
   title: string
   instruction: string
   hint?: string
-  goal: Goal
+  goal: G
   /** Parts the learner can add from the tray during this step. */
-  tray: PartKind[]
+  tray: K[]
   /** Shown once the goal is met. */
   explain?: { title: string; body: string; term?: Term }
 }
 
-export interface Experiment {
+interface ExperimentBase {
   id: string
   number: number
   levelN: number
@@ -118,17 +127,31 @@ export interface Experiment {
   /** Concepts this experiment prepares you for. */
   leadsTo: string
   xp: number
-  setup: Circuit
-  steps: ExperimentStep[]
   status: 'ready' | 'planned'
 }
+
+/** Runs on the Circuit Lab bench: batteries, resistors, LEDs and switches. */
+export interface CircuitExperiment extends ExperimentBase {
+  bench?: 'circuit'
+  setup: Circuit
+  steps: ExperimentStep[]
+}
+
+/** Runs on the Microcontroller Lab bench: a board, its pins, and a program. */
+export interface MicroExperiment extends ExperimentBase {
+  bench: 'micro'
+  setup: MicroSetup
+  steps: ExperimentStep<MicroGoal, MicroPartKind>[]
+}
+
+export type Experiment = CircuitExperiment | MicroExperiment
 
 export interface CatalogComponent {
   id: string
   name: string
   /** Technical name, introduced after the plain one. */
   technical: string
-  group: 'power' | 'passive' | 'semiconductor' | 'switching' | 'connection' | 'protection'
+  group: 'power' | 'passive' | 'semiconductor' | 'switching' | 'connection' | 'protection' | 'computing'
   /** What is it? */
   what: string
   /** What does it do? */
@@ -144,7 +167,22 @@ export interface CatalogComponent {
   unlockLevel: number
   /** A playable link, if any. */
   tryIt?: { label: string; to: string }
-  symbol: 'battery' | 'resistor' | 'led' | 'capacitor' | 'diode' | 'npn' | 'mosfet' | 'relay' | 'connector' | 'fuse' | 'regulator' | 'switch' | 'button'
+  symbol:
+    | 'battery'
+    | 'resistor'
+    | 'led'
+    | 'capacitor'
+    | 'diode'
+    | 'npn'
+    | 'mosfet'
+    | 'relay'
+    | 'connector'
+    | 'fuse'
+    | 'regulator'
+    | 'switch'
+    | 'button'
+    | 'potentiometer'
+    | 'mcu'
 }
 
 export interface CapstoneStage {

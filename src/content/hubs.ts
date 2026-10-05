@@ -42,8 +42,8 @@ export const HUBS: Hub[] = [
     tagline: 'A tiny computer that lets software control hardware.',
     unlockLevel: 4,
     chainLabel: 'Microcontroller',
-    topics: ['Digital signals', 'Analog signals', 'GPIO', 'PWM', 'ADC', 'Communication', 'Basic code'],
-    status: 'preview',
+    topics: ['Digital signals', 'Analog signals', 'Voltage dividers', 'GPIO', 'PWM', 'ADC', 'Basic code'],
+    status: 'open',
   },
   {
     id: 'robotics',

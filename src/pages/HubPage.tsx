@@ -9,7 +9,7 @@ import { LockedNotice } from './LockedNotice'
 import { CircuitsHub } from './hubs/CircuitsHub'
 import { ComponentsHub } from './hubs/ComponentsHub'
 import { ElectricityHub } from './hubs/ElectricityHub'
-import { MicroPreview } from './previews/MicroPreview'
+import { MicroHub } from './hubs/MicroHub'
 import { PcbPreview } from './previews/PcbPreview'
 import { RoboticsPreview } from './previews/RoboticsPreview'
 import { PreviewBanner } from './hubs/shared'
@@ -46,7 +46,7 @@ export function HubPage() {
         {hub.id === 'electricity' && <ElectricityHub hub={hub} />}
         {hub.id === 'components' && <ComponentsHub />}
         {hub.id === 'circuits' && <CircuitsHub hub={hub} />}
-        {hub.id === 'microcontrollers' && <MicroPreview />}
+        {hub.id === 'microcontrollers' && <MicroHub hub={hub} />}
         {hub.id === 'robotics' && <RoboticsPreview />}
         {hub.id === 'pcb' && <PcbPreview />}
       </div>

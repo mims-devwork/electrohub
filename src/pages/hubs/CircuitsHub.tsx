@@ -10,7 +10,7 @@ export function CircuitsHub({ hub }: { hub: Hub }) {
   const snap = useSnapshot()
   return (
     <div className="grid gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4">
         {hubLevels(hub.id).map((l) => (
           <LevelBlock key={l.n} level={l} hub={hub} />
         ))}
