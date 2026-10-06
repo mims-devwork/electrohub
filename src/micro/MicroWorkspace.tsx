@@ -1,8 +1,10 @@
 import { useState, type ReactNode } from 'react'
 import { PartGlyph } from '../circuit/PartGlyph'
 import { IssueCard } from '../ui/primitives'
-import { BENCH_H, BENCH_W, BOARD, PIN_BY_ID } from './board'
-import { MicroBench } from './MicroBench'
+import { BENCH_H, BENCH_W, BOARD, MICRO_PART_DEFS, PIN_BY_ID } from './board'
+import { CodeListing, type CodeStatus } from './CodeListing'
+import { BatteryPackGlyph, DriverGlyph } from './glyphs'
+import { BOUNDS, MicroBench } from './MicroBench'
 import type { BoardPin, MicroPartKind } from './types'
 import type { MicroApi } from './useMicro'
 
@@ -11,6 +13,36 @@ const TRAY_LABEL: Record<MicroPartKind, string> = {
   pot: 'Potentiometer',
   button: 'Push button',
   led: 'LED + 220 Ω',
+  tmp36: 'Temp sensor',
+  servo: 'Servo',
+  motor: 'DC motor',
+  driver: 'Motor driver',
+  battery: '4 × AA pack',
+  encoder: 'Encoder',
+}
+
+/** Small preview of a part for the tray: [glyph, viewBox]. */
+function TrayGlyph({ kind }: { kind: MicroPartKind }) {
+  switch (kind) {
+    case 'resistor':
+      return <PartGlyph part={{ id: 'tray', kind: 'resistor', x: 0, y: 0, rot: 0, props: { ohms: BOARD.trayOhms } }} />
+    case 'button':
+      return <PartGlyph part={{ id: 'tray', kind: 'button', x: 0, y: 0, rot: 0, props: {} }} />
+    case 'driver':
+      return (
+        <g transform="scale(0.45)">
+          <DriverGlyph enable={0} dir={0} ok={false} />
+        </g>
+      )
+    case 'battery':
+      return (
+        <g transform="scale(0.55) translate(10 -6)">
+          <BatteryPackGlyph volts={BOARD.batteryVolts} />
+        </g>
+      )
+    default:
+      return null
+  }
 }
 
 function MicroTray({ kinds, onAdd }: { kinds: MicroPartKind[]; onAdd: (kind: MicroPartKind) => void }) {
@@ -33,8 +65,7 @@ function MicroTray({ kinds, onAdd }: { kinds: MicroPartKind[]; onAdd: (kind: Mic
             className="group flex w-[110px] flex-col items-center rounded-xl border border-ink-600 bg-ink-900 px-2 py-1.5 transition-colors hover:border-volt/60"
           >
             <svg viewBox="-60 -30 120 60" className="h-8 w-full">
-              {k === 'resistor' && <PartGlyph part={{ id: 'tray', kind: 'resistor', x: 0, y: 0, rot: 0, props: { ohms: BOARD.trayOhms } }} />}
-              {k === 'button' && <PartGlyph part={{ id: 'tray', kind: 'button', x: 0, y: 0, rot: 0, props: {} }} />}
+              <TrayGlyph kind={k} />
             </svg>
             <span className="text-xs text-fog-200">{TRAY_LABEL[k]}</span>
           </button>
@@ -48,52 +79,22 @@ function MicroTray({ kinds, onAdd }: { kinds: MicroPartKind[]; onAdd: (kind: Mic
 export function CodePanel({ api }: { api: MicroApi }) {
   const { program, slots, frame, uploading } = api
   const hasSlots = Object.keys(program.slots).length > 0
-  const status = uploading
-    ? { text: 'Uploading…', cls: 'border-volt/50 bg-volt/10 text-volt' }
+  const status: CodeStatus = uploading
+    ? { text: api.bootReason === 'reset' ? 'Restarting…' : 'Uploading…', tone: 'busy' }
     : !frame.sol.powered
-      ? { text: 'No power', cls: 'border-danger/50 bg-danger/10 text-rose-200' }
-      : { text: '● Running', cls: 'border-ok/50 bg-ok/10 text-ok' }
+      ? { text: 'No power', tone: 'bad' }
+      : { text: '● Running', tone: 'ok' }
   return (
-    <div className="panel min-w-0 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-fog-400">
-          Program on the board · <span className="font-mono normal-case tracking-normal text-fog-300">{program.name}</span>
-        </div>
-        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${status.cls}`}>{status.text}</span>
-      </div>
-      <pre className="mt-3 overflow-x-auto rounded-lg bg-ink-950 p-3 font-mono text-[12.5px] leading-6 scrollbar-thin">
-        {program.lines.map((l, i) => {
-          const active = !!l.tag && frame.running && frame.active.includes(l.tag)
-          return (
-            <div key={i} className={`rounded px-1 transition-colors ${active ? 'bg-brain/20 text-fog-100' : 'text-fog-400'}`}>
-              {l.code.map((tok, j) =>
-                typeof tok === 'string' ? (
-                  <span key={j}>{tok || ' '}</span>
-                ) : (
-                  <select
-                    key={j}
-                    value={slots[tok.slot]}
-                    onChange={(e) => api.setSlot(tok.slot, e.target.value)}
-                    aria-label={program.slots[tok.slot].label}
-                    className="mx-0.5 cursor-pointer rounded border border-brain/60 bg-brain/15 px-1 font-mono text-[12.5px] text-brain"
-                  >
-                    {program.slots[tok.slot].options.map((o) => (
-                      <option key={o} value={o} className="bg-ink-900 text-fog-100">
-                        {o}
-                      </option>
-                    ))}
-                  </select>
-                ),
-              )}
-            </div>
-          )
-        })}
-      </pre>
-      <p className="mt-2 text-xs text-fog-400">
-        {hasSlots ? 'The purple boxes are yours to change. The board re-uploads the program each time you do. ' : ''}Highlighted lines are the ones running right now.
-        loop() repeats over and over, thousands of times a second on a real board.
-      </p>
-    </div>
+    <CodeListing
+      name={program.name}
+      lines={program.lines}
+      slots={program.slots}
+      values={slots}
+      active={frame.running ? frame.active : []}
+      status={status}
+      onSlot={api.setSlot}
+      footnote={`${hasSlots ? 'The purple boxes are yours to change. The board re-uploads the program each time you do. ' : ''}Highlighted lines are the ones running right now. loop() repeats over and over, thousands of times a second on a real board.`}
+    />
   )
 }
 
@@ -156,7 +157,16 @@ function Scope({ api }: { api: MicroApi }) {
 function HandsOn({ api }: { api: MicroApi }) {
   const pots = api.circuit.parts.filter((p) => p.kind === 'pot')
   const buttons = api.circuit.parts.filter((p) => p.kind === 'button')
-  if (!pots.length && !buttons.length) return null
+  const tmps = api.circuit.parts.filter((p) => p.kind === 'tmp36')
+  const resettable = !!api.program.resettable
+  if (!pots.length && !buttons.length && !tmps.length && !resettable) return null
+  const hold = (on: (held: boolean) => void) => ({
+    onPointerDown: () => on(true),
+    onPointerUp: () => on(false),
+    onPointerLeave: () => on(false),
+    onKeyDown: (e: React.KeyboardEvent) => (e.key === ' ' || e.key === 'Enter') && on(true),
+    onKeyUp: () => on(false),
+  })
   return (
     <div className="panel flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3">
       {pots.map((p) => {
@@ -180,20 +190,41 @@ function HandsOn({ api }: { api: MicroApi }) {
       {buttons.map((b) => {
         const pressed = !!api.inputs.pressed[b.id]
         return (
-          <button
-            key={b.id}
-            onPointerDown={() => api.setPressed(b.id, true)}
-            onPointerUp={() => api.setPressed(b.id, false)}
-            onPointerLeave={() => api.setPressed(b.id, false)}
-            onKeyDown={(e) => (e.key === ' ' || e.key === 'Enter') && api.setPressed(b.id, true)}
-            onKeyUp={() => api.setPressed(b.id, false)}
-            className={`rounded-lg border px-4 py-2 text-sm font-medium ${pressed ? 'border-volt bg-volt text-ink-950' : 'border-ink-500 bg-ink-900 text-fog-100'}`}
-          >
+          <button key={b.id} {...hold((h) => api.setPressed(b.id, h))} className={`rounded-lg border px-4 py-2 text-sm font-medium ${pressed ? 'border-volt bg-volt text-ink-950' : 'border-ink-500 bg-ink-900 text-fog-100'}`}>
             {pressed ? 'Pressed' : 'Press & hold the button'}
           </button>
         )
       })}
+      {tmps.map((t) => {
+        const c = api.inputs.temp?.[t.id] ?? 21
+        return (
+          <div key={t.id} className="flex flex-wrap items-center gap-3">
+            <WarmButton onHold={(h) => api.setWarm(t.id, h)} hold={hold} />
+            <span className="rounded-md border border-ink-600 bg-ink-950 px-2 py-1 font-mono text-xs text-fog-200" title="A real thermometer next to the sensor">
+              🌡️ thermometer: {c.toFixed(1)} °C
+            </span>
+          </div>
+        )
+      })}
+      {resettable && (
+        <button onClick={api.restart} className="rounded-lg border border-ink-500 bg-ink-900 px-4 py-2 text-sm text-fog-100 hover:border-fog-400">
+          ↺ Press the board’s reset button
+        </button>
+      )}
     </div>
+  )
+}
+
+function WarmButton({ onHold, hold }: { onHold: (held: boolean) => void; hold: (on: (held: boolean) => void) => object }) {
+  const [held, setHeld] = useState(false)
+  const set = (h: boolean) => {
+    setHeld(h)
+    onHold(h)
+  }
+  return (
+    <button {...hold(set)} className={`rounded-lg border px-4 py-2 text-sm font-medium ${held ? 'border-warn bg-warn/20 text-orange-100' : 'border-ink-500 bg-ink-900 text-fog-100'}`}>
+      {held ? '✋ Warming it with your fingers…' : '✋ Hold the sensor between your fingers'}
+    </button>
   )
 }
 
@@ -202,16 +233,32 @@ export function MicroWorkspace({ api, tray, side, onReset }: { api: MicroApi; tr
   const [readings, setReadings] = useState(true)
   const highlight = api.issues.filter((i) => i.severity !== 'success').flatMap((i) => i.highlight)
 
+  // Put a new part where its outline (legs included) doesn't overlap anything already on the bench.
   const addAtFreeSpot = (kind: MicroPartKind) => {
-    const taken = (x: number, y: number) => api.circuit.parts.some((p) => Math.hypot(p.x - x, p.y - y) < 100)
-    const spots = [
-      { x: 620, y: 270 },
-      { x: 720, y: 160 },
-      { x: 720, y: 400 },
-      { x: 560, y: 420 },
-      { x: 760, y: 280 },
-    ]
-    const spot = spots.find((s) => !taken(s.x, s.y)) ?? { x: BENCH_W - 120, y: BENCH_H / 2 }
+    const box = (k: MicroPartKind, x: number, y: number) => {
+      const b = BOUNDS[k]
+      const legs = MICRO_PART_DEFS[k].terminals.map((t) => t.dx)
+      const left = Math.min(b.x, ...legs) - 16
+      const right = Math.max(b.x + b.w, ...legs) + 16
+      return { l: x + left, r: x + right, t: y + b.y - 26, b: y + b.y + b.h + 26 }
+    }
+    const fits = (x: number, y: number) => {
+      const me = box(kind, x, y)
+      if (me.l < 450 || me.r > BENCH_W - 4 || me.t < 4 || me.b > BENCH_H - 4) return false
+      return api.circuit.parts.every((p) => {
+        const o = box(p.kind, p.x, p.y)
+        return me.r < o.l || me.l > o.r || me.b < o.t || me.t > o.b
+      })
+    }
+    let spot = { x: BENCH_W - 120, y: BENCH_H / 2 }
+    search: for (let y = 90; y <= BENCH_H - 50; y += 20) {
+      for (let x = 560; x <= BENCH_W - 60; x += 20) {
+        if (fits(x, y)) {
+          spot = { x, y }
+          break search
+        }
+      }
+    }
     setSelected(api.addPart(kind, spot.x, spot.y))
   }
 

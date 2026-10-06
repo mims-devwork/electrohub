@@ -25,6 +25,30 @@ export function SchematicSymbol({ symbol, className = '' }: { symbol: CatalogCom
             <path d="M53 47 L60 39 L67 47" {...s} strokeWidth={2} />
           </>
         )
+      case 'motor':
+        return (
+          <>
+            <path d="M5 30 H42 M78 30 H115" {...s} />
+            <circle cx="60" cy="30" r="18" {...s} strokeWidth={2.5} />
+            <text x="60" y="35" fill="currentColor" fontSize="14" fontWeight="700" textAnchor="middle">
+              M
+            </text>
+          </>
+        )
+      case 'sensor':
+        return (
+          <>
+            <rect x="36" y="12" width="48" height="36" rx="3" {...s} strokeWidth={2} />
+            <path d="M5 22 H36 M5 38 H36 M84 30 H115 M48 34 Q 54 22 60 30 T 72 26" {...s} strokeWidth={2} />
+          </>
+        )
+      case 'driver':
+        return (
+          <>
+            <rect x="34" y="6" width="52" height="48" rx="3" {...s} strokeWidth={2} />
+            <path d="M14 18 H34 M14 42 H34 M86 22 H106 M86 38 H106 M50 18 V42 M70 18 V42 M50 30 H70" {...s} strokeWidth={2} />
+          </>
+        )
       case 'mcu':
         return (
           <>

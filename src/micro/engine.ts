@@ -11,6 +11,13 @@ import type { BoardPin, MicroCircuit, MicroInputs, MicroRef, PinOutputs } from '
  * conductances; LED modules are "off" or "forward voltage + 235 Ω", guessed and
  * re-solved like the Circuit Lab solver. Input pins draw no current at all,
  * so a net that no source can reach is floating: its voltage is undefined.
+ *
+ * Robot parts follow the same idea. A battery pack is another source; a motor
+ * is a resistance whose voltage sets its speed; the motor driver is four
+ * switches (an H-bridge) whose positions depend on its EN and DIR inputs, so
+ * it's guessed and re-solved like an LED. It only obeys those inputs if its
+ * GND is connected to the board's GND: without a shared 0 V, "5 V on EN"
+ * means nothing to it.
  */
 
 const GMIN = 1e-9
@@ -36,6 +43,24 @@ export interface LedReading {
   reversed: boolean
 }
 
+export interface MotorReading {
+  /** Average voltage across the motor, a − b (V). */
+  volts: number
+  current: number
+  /** Speed the voltage is asking for, −1…1 (the shaft catches up over time). */
+  target: number
+}
+
+export interface DriverReading {
+  /** Shares a ground with the board, so it can understand EN and DIR. */
+  grounded: boolean
+  /** Has motor power on VM. */
+  powered: boolean
+  /** Fraction of the time EN reads HIGH. */
+  enable: number
+  dir: 0 | 1
+}
+
 export interface BoardSolution {
   /** False when the board's fuse has cut the power because 5V touches GND. */
   powered: boolean
@@ -50,6 +75,13 @@ export interface BoardSolution {
   /** Current pushed out of each output pin (A). */
   pinCurrent: Partial<Record<BoardPin, number>>
   leds: Record<string, LedReading>
+  tmps: Record<string, { powered: boolean; reversed: boolean }>
+  /** Angle each servo is holding, or null if it has no power or no valid signal. */
+  servos: Record<string, { powered: boolean; angle: number | null }>
+  motors: Record<string, MotorReading>
+  drivers: Record<string, DriverReading>
+  /** Which pin each encoder's pulses reach, if it has power. */
+  encoders: Record<string, { powered: boolean; pins: BoardPin[] }>
 }
 
 const PIN_IDS = BOARD_PINS.map((p) => p.pin)
@@ -137,13 +169,50 @@ interface StateSolve {
   v: Float64Array
   stamps: { owner: string; stamp: Stamp }[]
   ledOn: Map<string, boolean>
+  tmpOn: Map<string, boolean>
+  tmpReversed: Map<string, boolean>
+  drive: Map<string, { en: boolean; dir: 0 | 1; grounded: boolean }>
+}
+
+/** Which nets can be reached from the given seeds through real connections. */
+function reach(n: number, stamps: { stamp: Stamp }[], seeds: number[]): boolean[] {
+  const adj: number[][] = Array.from({ length: n }, () => [])
+  for (const { stamp } of stamps) {
+    if (stamp.g > CONNECTED && stamp.a !== stamp.b) {
+      adj[stamp.a].push(stamp.b)
+      adj[stamp.b].push(stamp.a)
+    }
+  }
+  const seen = new Array<boolean>(n).fill(false)
+  const queue: number[] = []
+  for (const k of seeds) {
+    if (!seen[k]) {
+      seen[k] = true
+      queue.push(k)
+    }
+  }
+  while (queue.length) {
+    const k = queue.pop()!
+    for (const j of adj[k]) {
+      if (!seen[j]) {
+        seen[j] = true
+        queue.push(j)
+      }
+    }
+  }
+  return seen
 }
 
 /** Solve the bench with every output pin fully HIGH or LOW. */
 function solveState(circuit: MicroCircuit, inputs: MicroInputs, levels: PinOutputs, powered: boolean, netOf: Record<MicroRef, number>, n: number): StateSolve {
   const node = (ref: MicroRef) => netOf[ref]
   const leds = circuit.parts.filter((p) => p.kind === 'led')
+  const tmps = circuit.parts.filter((p) => p.kind === 'tmp36')
+  const drivers = circuit.parts.filter((p) => p.kind === 'driver')
   const ledOn = new Map(leds.map((l) => [l.id, false]))
+  const tmpOn = new Map(tmps.map((t) => [t.id, false]))
+  const tmpReversed = new Map(tmps.map((t) => [t.id, false]))
+  const drive = new Map(drivers.map((d) => [d.id, { en: false, dir: 0 as 0 | 1, grounded: false }]))
 
   const build = () => {
     const stamps: { owner: string; stamp: Stamp }[] = []
@@ -174,6 +243,37 @@ function solveState(circuit: MicroCircuit, inputs: MicroInputs, levels: PinOutpu
             stamps.push({ owner: p.id, stamp: { a: t('anode'), b: t('cathode'), g: 1 / (BOARD.ledOhms + 15), src: vf } })
           }
           break
+        case 'tmp36':
+          if (tmpOn.get(p.id)) {
+            const celsius = inputs.temp?.[p.id] ?? 21
+            stamps.push({ owner: p.id, stamp: { a: t('out'), b: t('gnd'), g: 1 / 50, src: BOARD.tmpOffset + BOARD.tmpPerDegree * celsius } })
+          }
+          // Fitted backwards, current pours through its protection diode and it heats up.
+          if (tmpReversed.get(p.id)) stamps.push({ owner: `${p.id}:rev`, stamp: { a: t('gnd'), b: t('vs'), g: 1 / 30, src: 0.7 } })
+          break
+        case 'servo':
+          stamps.push({ owner: p.id, stamp: { a: t('pwr'), b: t('gnd'), g: 1 / BOARD.servoOhms, src: 0 } })
+          break
+        case 'motor':
+          stamps.push({ owner: p.id, stamp: { a: t('a'), b: t('b'), g: 1 / BOARD.motorOhms, src: 0 } })
+          break
+        case 'battery':
+          stamps.push({ owner: p.id, stamp: { a: t('pos'), b: t('neg'), g: 1 / BOARD.batteryOhms, src: p.props.voltage ?? BOARD.batteryVolts } })
+          break
+        case 'driver': {
+          // An H-bridge: each output is switched to VM or to GND.
+          const d = drive.get(p.id)!
+          const g = 1 / BOARD.driverOhms
+          const high = d.en ? (d.dir ? 'ob' : 'oa') : null
+          for (const out of ['oa', 'ob']) {
+            stamps.push({ owner: `${p.id}:${out}`, stamp: out === high ? { a: t(out), b: t('vm'), g, src: 0 } : { a: t(out), b: t('gnd'), g, src: 0 } })
+          }
+          break
+        }
+        case 'encoder':
+          // Its output switches so fast that the pin sees an average; the pulses themselves are counted by the runtime.
+          if (powered) stamps.push({ owner: p.id, stamp: { a: t('out'), b: t('gnd'), g: 1 / 1000, src: 0 } })
+          break
       }
     }
     return stamps
@@ -183,23 +283,39 @@ function solveState(circuit: MicroCircuit, inputs: MicroInputs, levels: PinOutpu
   let v = solveLinear(n, stamps.map((s) => s.stamp))
   for (let iter = 0; iter < 20; iter++) {
     let changed = false
+    const set = <T,>(map: Map<string, T>, id: string, value: T, same: (a: T, b: T) => boolean = (a, b) => a === b) => {
+      if (!same(map.get(id)!, value)) {
+        map.set(id, value)
+        changed = true
+      }
+    }
     for (const led of leds) {
       const vd = v[node(`${led.id}:anode`)] - v[node(`${led.id}:cathode`)]
       const vf = LED_SPECS[led.props.color ?? 'red'].vf
       const on = ledOn.get(led.id)!
-      if (!on && vd > vf + 1e-6) {
-        ledOn.set(led.id, true)
-        changed = true
-      } else if (on && vd < vf - 1e-9) {
-        ledOn.set(led.id, false)
-        changed = true
+      if (!on && vd > vf + 1e-6) set(ledOn, led.id, true)
+      else if (on && vd < vf - 1e-9) set(ledOn, led.id, false)
+    }
+    for (const tmp of tmps) {
+      const supply = v[node(`${tmp.id}:vs`)] - v[node(`${tmp.id}:gnd`)]
+      if (!tmpOn.get(tmp.id) && supply > 2.7) set(tmpOn, tmp.id, true)
+      else if (tmpOn.get(tmp.id) && supply < 2.4) set(tmpOn, tmp.id, false)
+      if (!tmpReversed.get(tmp.id) && supply < -2) set(tmpReversed, tmp.id, true)
+    }
+    if (drivers.length) {
+      const grounded = reach(n, stamps, [0])
+      for (const d of drivers) {
+        const g = node(`${d.id}:gnd`)
+        const ok = grounded[g]
+        const high = (name: string) => ok && grounded[node(`${d.id}:${name}`)] && v[node(`${d.id}:${name}`)] - v[g] > 2.5
+        set(drive, d.id, { en: high('en'), dir: high('dir') ? 1 : 0, grounded: ok }, (a, b) => a.en === b.en && a.dir === b.dir && a.grounded === b.grounded)
       }
     }
     if (!changed) break
     stamps = build()
     v = solveLinear(n, stamps.map((s) => s.stamp))
   }
-  return { v, stamps, ledOn }
+  return { v, stamps, ledOn, tmpOn, tmpReversed, drive }
 }
 
 const current = (s: Stamp, v: Float64Array) => s.g * (v[s.a] - v[s.b]) - s.g * s.src
@@ -239,31 +355,9 @@ export function solveBoard(circuit: MicroCircuit, inputs: MicroInputs, outputs: 
   const netVolts = Array.from({ length: n }, (_, i) => mix(hi.v[i], lo.v[i]))
 
   // Floating nets: nothing that sets a voltage can reach them.
-  const adj: number[][] = Array.from({ length: n }, () => [])
-  for (const { stamp } of hi.stamps) {
-    if (stamp.g > CONNECTED && stamp.a !== stamp.b) {
-      adj[stamp.a].push(stamp.b)
-      adj[stamp.b].push(stamp.a)
-    }
-  }
-  const driven = new Array<boolean>(n).fill(false)
-  const queue = [0]
-  driven[0] = true
-  for (const { owner, stamp } of hi.stamps) {
-    if ((owner === 'supply' || owner.startsWith('pin:')) && !driven[stamp.a]) {
-      driven[stamp.a] = true
-      queue.push(stamp.a)
-    }
-  }
-  while (queue.length) {
-    const k = queue.pop()!
-    for (const j of adj[k]) {
-      if (!driven[j]) {
-        driven[j] = true
-        queue.push(j)
-      }
-    }
-  }
+  const seeds = [0, ...hi.stamps.filter(({ owner }) => owner === 'supply' || owner.startsWith('pin:')).map(({ stamp }) => stamp.a)]
+  // A battery sets voltages too, but only relative to itself: count it only once it's tied to something driven.
+  const driven = reach(n, hi.stamps, seeds)
   const floating = driven.map((d) => !d)
 
   const pinVolts = {} as Record<BoardPin, number>
@@ -306,7 +400,52 @@ export function solveBoard(circuit: MicroCircuit, inputs: MicroInputs, outputs: 
     }
   }
 
-  return { powered, supplyCurrent: powered ? supplyCurrent : 0, netOf, netVolts, floating, pinVolts, pinFloating, pinCurrent, leds }
+  const volts = (ref: MicroRef) => netVolts[netOf[ref]]
+  const pinsOn = (ref: MicroRef) => PIN_IDS.filter((p) => netOf[boardRef(p)] === netOf[ref])
+
+  const tmps: BoardSolution['tmps'] = {}
+  for (const t of circuit.parts.filter((p) => p.kind === 'tmp36')) {
+    tmps[t.id] = { powered: !!hi.tmpOn.get(t.id), reversed: !!hi.tmpReversed.get(t.id) }
+  }
+
+  const servos: BoardSolution['servos'] = {}
+  for (const sv of circuit.parts.filter((p) => p.kind === 'servo')) {
+    const ok = volts(`${sv.id}:pwr`) - volts(`${sv.id}:gnd`) > 4
+    // The signal is a pulse every 20 ms: 1 ms means 0°, 2 ms means 180°.
+    const pin = pinsOn(`${sv.id}:sig`).find((p) => outputs[p] !== undefined)
+    const ms = pin ? (outputs[pin] ?? 0) * 20 : 0
+    const angle = ok && powered && ms >= 0.5 && ms <= 2.5 ? Math.min(180, Math.max(0, (ms - 1) * 180)) : null
+    servos[sv.id] = { powered: ok && powered, angle }
+  }
+
+  const motors: BoardSolution['motors'] = {}
+  for (const m of circuit.parts.filter((p) => p.kind === 'motor')) {
+    const st = (s: StateSolve) => s.stamps.find((x) => x.owner === m.id)!.stamp
+    const vm = volts(`${m.id}:a`) - volts(`${m.id}:b`)
+    const amps = mix(Math.abs(current(st(hi), hi.v)), Math.abs(current(st(lo), lo.v)))
+    const push = Math.max(0, Math.abs(vm) - BOARD.motorStartVolts) / (BOARD.motorFullVolts - BOARD.motorStartVolts)
+    motors[m.id] = { volts: vm, current: amps, target: Math.sign(vm) * Math.min(1, push) }
+  }
+
+  const drivers: BoardSolution['drivers'] = {}
+  for (const d of circuit.parts.filter((p) => p.kind === 'driver')) {
+    const h = hi.drive.get(d.id)!
+    const l = lo.drive.get(d.id)!
+    drivers[d.id] = {
+      grounded: h.grounded,
+      powered: volts(`${d.id}:vm`) - volts(`${d.id}:gnd`) > 3 && !floating[netOf[`${d.id}:vm`]],
+      enable: mix(h.en ? 1 : 0, l.en ? 1 : 0),
+      dir: h.dir,
+    }
+  }
+
+  const encoders: BoardSolution['encoders'] = {}
+  for (const e of circuit.parts.filter((p) => p.kind === 'encoder')) {
+    const ok = powered && volts(`${e.id}:vcc`) - volts(`${e.id}:gnd`) > 3
+    encoders[e.id] = { powered: ok, pins: ok ? pinsOn(`${e.id}:out`) : [] }
+  }
+
+  return { powered, supplyCurrent: powered ? supplyCurrent : 0, netOf, netVolts, floating, pinVolts, pinFloating, pinCurrent, leds, tmps, servos, motors, drivers, encoders }
 }
 
 /** Do this pin and that terminal share a net (are they wired together)? */

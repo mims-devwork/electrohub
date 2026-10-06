@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { PartGlyph } from '../circuit/PartGlyph'
 import { BOARD_PINS, pinPosition } from './board'
 import type { BoardPin } from './types'
@@ -175,5 +176,166 @@ export function BenchDefs() {
         <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#000" floodOpacity="0.5" />
       </filter>
     </defs>
+  )
+}
+
+/** Spin a group smoothly at `revsPerSec` (signed), independent of how often React re-renders. */
+function useSpin(revsPerSec: number) {
+  const ref = useRef<SVGGElement>(null)
+  const speed = useRef(revsPerSec)
+  speed.current = revsPerSec
+  useEffect(() => {
+    let angle = 0
+    let last = performance.now()
+    let raf = 0
+    const tick = (now: number) => {
+      angle = (angle + speed.current * 360 * Math.min(0.05, (now - last) / 1000)) % 360
+      last = now
+      ref.current?.setAttribute('transform', `rotate(${angle.toFixed(1)})`)
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [])
+  return ref
+}
+
+const leads = (ys: number[], from: number, to: number, colors?: string[]) =>
+  ys.map((y, i) => <line key={y} x1={from} x2={to} y1={y} y2={y} stroke={colors?.[i] ?? LEAD} strokeWidth="4" />)
+
+/** TMP36 temperature sensor: a small black TO-92 package, flat face left. */
+export function TmpGlyph({ hot }: { hot: boolean }) {
+  return (
+    <g>
+      {leads([-26, 0, 26], -48, -16)}
+      {hot && <circle cx="4" r="34" fill="#ff5a1a" opacity="0.45" filter="url(#glow)" />}
+      <path d="M -16 -30 H 2 A 22 30 0 0 1 2 30 H -16 Z" fill={hot ? '#7c2d12' : '#141414'} stroke="#333" />
+      <text x="0" y="4" textAnchor="middle" fontSize="8" fill="#9ca3af" fontFamily="JetBrains Mono, monospace" transform="rotate(-90 0 0)">
+        TMP36
+      </text>
+    </g>
+  )
+}
+
+/** Hobby servo seen from above: three coloured wires, a blue case and a white horn. */
+export function ServoGlyph({ angle }: { angle: number | null }) {
+  const a = angle ?? 90
+  return (
+    <g>
+      {leads([-26, 0, 26], -70, -46, ['#7c4a1e', '#dc2626', '#f97316'])}
+      <rect x="-46" y="-34" width="92" height="68" rx="8" fill="#1d4ed8" stroke="#1e3a8a" strokeWidth="2" />
+      <rect x="-56" y="-8" width="10" height="16" rx="2" fill="#1e3a8a" />
+      <rect x="46" y="-8" width="10" height="16" rx="2" fill="#1e3a8a" />
+      {/* the angle scale */}
+      <path d="M -6 -2 A 26 26 0 0 1 46 -2" fill="none" stroke="#93c5fd" strokeOpacity="0.35" strokeWidth="2" strokeDasharray="2 4" transform="translate(-20 0)" />
+      <circle cx="20" cy="0" r="11" fill="#e5e7eb" />
+      <g transform={`translate(20 0) rotate(${a - 90})`} style={{ transition: 'transform 0.35s ease-out' }}>
+        <rect x="-5" y="-38" width="10" height="42" rx="5" fill="#f8fafc" stroke="#cbd5e1" />
+        <circle cy="-30" r="2" fill="#94a3b8" />
+      </g>
+      <circle cx="20" cy="0" r="4" fill="#94a3b8" />
+      {angle === null && (
+        <text x="0" y="26" textAnchor="middle" fontSize="9" fill="#bfdbfe">
+          waiting
+        </text>
+      )}
+    </g>
+  )
+}
+
+/** Yellow gear motor with a wheel on its shaft. */
+export function MotorGlyph({ spin }: { spin: number }) {
+  const wheel = useSpin(spin * 3)
+  return (
+    <g>
+      {leads([-14, 14], -62, -42)}
+      <rect x="-42" y="-24" width="62" height="48" rx="8" fill="#eab308" stroke="#a16207" strokeWidth="2" />
+      <text x="-11" y="4" textAnchor="middle" fontSize="9" fontWeight="700" fill="#713f12">
+        6 V
+      </text>
+      <rect x="20" y="-5" width="12" height="10" fill="#d4d4d8" />
+      <g transform="translate(58 0)">
+        <circle r="30" fill="#1f2937" stroke="#111827" strokeWidth="4" />
+        <g ref={wheel}>
+          {[0, 120, 240].map((r) => (
+            <rect key={r} x="-3" y="-25" width="6" height="25" fill="#6b7280" transform={`rotate(${r})`} />
+          ))}
+          <circle cy="-22" r="4" fill="#fbbf24" />
+        </g>
+        <circle r="7" fill="#9ca3af" />
+      </g>
+    </g>
+  )
+}
+
+/** Slotted encoder disc and the light sensor fork that watches it. */
+export function EncoderGlyph({ spin, powered }: { spin: number; powered: boolean }) {
+  const disc = useSpin(spin * 3)
+  return (
+    <g>
+      {leads([-26, 0, 26], -54, -30)}
+      <rect x="-30" y="-32" width="34" height="64" rx="4" fill="#1e3a8a" />
+      <g transform="translate(26 0)">
+        <circle r="26" fill="#111827" stroke="#374151" />
+        <g ref={disc}>
+          {Array.from({ length: 20 }, (_, i) => (
+            <rect key={i} x="-1.5" y="-24" width="3" height="8" fill="#0b1120" transform={`rotate(${i * 18})`} />
+          ))}
+        </g>
+        <circle r="5" fill="#6b7280" />
+      </g>
+      <rect x="-6" y="-30" width="14" height="14" rx="2" fill="#0f172a" stroke="#475569" />
+      <circle cx="1" cy="-23" r="3" fill={powered ? '#f43f5e' : '#3f1d2b'} />
+    </g>
+  )
+}
+
+/** H-bridge motor driver board. */
+export function DriverGlyph({ enable, dir, ok }: { enable: number; dir: 0 | 1; ok: boolean }) {
+  return (
+    <g>
+      {leads([-42, -14, 14, 42], -76, -60)}
+      {leads([-16, 16], 60, 76)}
+      <rect x="-60" y="-58" width="120" height="116" rx="8" fill="#7f1d1d" stroke="#450a0a" strokeWidth="2" />
+      <rect x="-22" y="-18" width="44" height="36" rx="3" fill="#141414" />
+      <text x="0" y="3" textAnchor="middle" fontSize="8" fontWeight="700" fill="#9ca3af" fontFamily="JetBrains Mono, monospace">
+        H-BRIDGE
+      </text>
+      <text x="0" y="-36" textAnchor="middle" fontSize="9" fontWeight="700" fill="#fecaca" letterSpacing="1">
+        MOTOR DRIVER
+      </text>
+      <circle cx="-30" cy="38" r="4" fill={ok && enable > 0 ? '#22c55e' : '#14532d'} />
+      <text x="-22" y="41" fontSize="8" fill="#fecaca">
+        EN
+      </text>
+      {ok && enable > 0 && (
+        <text x="22" y="42" textAnchor="middle" fontSize="13" fill="#fde68a">
+          {dir ? '↺' : '↻'}
+        </text>
+      )}
+    </g>
+  )
+}
+
+/** A holder with four AA cells. */
+export function BatteryPackGlyph({ volts }: { volts: number }) {
+  return (
+    <g>
+      <line x1="-82" x2="-64" y1="-12" y2="-12" stroke="#dc2626" strokeWidth="4" />
+      <line x1="-82" x2="-64" y1="12" y2="12" stroke="#1f2937" strokeWidth="4" />
+      <rect x="-64" y="-30" width="132" height="60" rx="6" fill="#111827" stroke="#374151" strokeWidth="2" />
+      {[0, 1, 2, 3].map((i) => (
+        <g key={i} transform={`translate(${-58 + i * 31} -24)`}>
+          <rect width="27" height="48" rx="4" fill="#b9802f" />
+          <rect y="16" width="27" height="32" rx="4" fill="#18181b" />
+          <text x="13.5" y="11" textAnchor="middle" fontSize="9" fontWeight="800" fill="#0b1120">
+            {i % 2 ? '−' : '+'}
+          </text>
+        </g>
+      ))}
+      <text x="2" y="44" textAnchor="middle" fontSize="10" fill="#8a9bb8" fontFamily="JetBrains Mono, monospace">
+        4 × AA · {volts} V
+      </text>
+    </g>
   )
 }

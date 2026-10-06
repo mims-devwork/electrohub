@@ -2,19 +2,25 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { PartGlyph } from '../circuit/PartGlyph'
 import { formatAmps, formatOhms } from '../sim/parts'
 import { BENCH_H, BENCH_W, BOARD, BOARD_PINS, MICRO_PART_DEFS, PIN_BY_ID, boardRef, microTerminalPosition, parseMicroRef, pinPosition, refPosition } from './board'
-import { BenchDefs, BoardGlyph, LedModuleGlyph, PotGlyph } from './glyphs'
+import { BatteryPackGlyph, BenchDefs, BoardGlyph, DriverGlyph, EncoderGlyph, LedModuleGlyph, MotorGlyph, PotGlyph, ServoGlyph, TmpGlyph } from './glyphs'
 import type { BoardPin, MicroPart, MicroPartKind, MicroRef } from './types'
 import type { MicroApi } from './useMicro'
 
 const SNAP = 10
 const TERMINAL_HIT = 30
 
-/** Rough half-size of each part, for hit areas and selection boxes. */
-const BOUNDS: Record<MicroPartKind, { x: number; y: number; w: number; h: number }> = {
+/** Each part's outline relative to its centre, for hit areas, selection boxes and finding free space. */
+export const BOUNDS: Record<MicroPartKind, { x: number; y: number; w: number; h: number }> = {
   pot: { x: -40, y: -40, w: 80, h: 80 },
   button: { x: -25, y: -25, w: 50, h: 50 },
   led: { x: -70, y: -34, w: 160, h: 68 },
   resistor: { x: -38, y: -16, w: 76, h: 32 },
+  tmp36: { x: -18, y: -30, w: 46, h: 60 },
+  servo: { x: -46, y: -40, w: 102, h: 72 },
+  motor: { x: -42, y: -30, w: 132, h: 60 },
+  driver: { x: -60, y: -58, w: 120, h: 116 },
+  battery: { x: -64, y: -30, w: 132, h: 60 },
+  encoder: { x: -30, y: -34, w: 82, h: 68 },
 }
 
 type Drag =
@@ -50,6 +56,7 @@ export function formatPinReading(api: MicroApi, pin: BoardPin): string {
   if (pin === '5V') return '5.00 V'
   if (pin === 'GND' || pin === 'GND2') return '0 V'
   const out = frame.outputs[pin]
+  if (out !== undefined && program.id === 'servo') return `pulse ${(out * 20).toFixed(2)} ms`
   if (out !== undefined) return out > 0 && out < 1 ? `PWM ${Math.round(out * 100)}%` : out ? 'OUT HIGH' : 'OUT LOW'
   if (program.outputs(slots).includes(pin) && api.uploading) return 'uploading…'
   // Say nothing about pins the program ignores and nobody has wired up.
@@ -73,6 +80,7 @@ export function MicroBench({
   showReadings?: boolean
 }) {
   const { circuit, frame, inputs } = api
+  const firstMotor = circuit.parts.find((p) => p.kind === 'motor')
   const { sol } = frame
   const svgRef = useRef<SVGSVGElement>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
@@ -262,7 +270,7 @@ export function MicroBench({
           const isSel = selectedId === part.id
           const led = sol.leds[part.id]
           return (
-            <g key={part.id} transform={`translate(${part.x} ${part.y})`}>
+            <g key={part.id} transform={`translate(${part.x} ${part.y})`} data-part={part.id}>
               {hl.has(part.id) && <rect x={b.x - 14} y={b.y - 14} width={b.w + 28} height={b.h + 28} rx="16" fill="#f43f5e" opacity="0.12" />}
               <g filter="url(#soft)" onPointerDown={(e) => onPartDown(e, part)} style={{ cursor: drag?.kind === 'part' ? 'grabbing' : 'grab' }}>
                 <rect x={b.x - 6} y={b.y - 6} width={b.w + 12} height={b.h + 12} fill="transparent" />
@@ -270,6 +278,12 @@ export function MicroBench({
                 {part.kind === 'button' && <PartGlyph part={{ id: part.id, kind: 'button', x: 0, y: 0, rot: 0, props: { closed: !!inputs.pressed[part.id] } }} />}
                 {part.kind === 'resistor' && <PartGlyph part={{ id: part.id, kind: 'resistor', x: 0, y: 0, rot: 0, props: { ohms: part.props.ohms ?? BOARD.trayOhms } }} />}
                 {part.kind === 'led' && <LedModuleGlyph brightness={led?.brightness ?? 0} current={led?.current ?? 0} />}
+                {part.kind === 'tmp36' && <TmpGlyph hot={!!sol.tmps[part.id]?.reversed} />}
+                {part.kind === 'servo' && <ServoGlyph angle={sol.servos[part.id]?.angle ?? null} />}
+                {part.kind === 'motor' && <MotorGlyph spin={frame.spin[part.id] ?? 0} />}
+                {part.kind === 'encoder' && <EncoderGlyph spin={firstMotor ? (frame.spin[firstMotor.id] ?? 0) : 0} powered={!!sol.encoders[part.id]?.powered} />}
+                {part.kind === 'driver' && <DriverGlyph enable={sol.drivers[part.id]?.enable ?? 0} dir={sol.drivers[part.id]?.dir ?? 0} ok={!!sol.drivers[part.id]?.grounded && !!sol.drivers[part.id]?.powered} />}
+                {part.kind === 'battery' && <BatteryPackGlyph volts={part.props.voltage ?? BOARD.batteryVolts} />}
               </g>
               {isSel && (
                 <rect x={b.x - 10} y={b.y - 10} width={b.w + 20} height={b.h + 20} rx="12" fill="none" stroke="#fbbf24" strokeDasharray="5 5" pointerEvents="none" />
@@ -381,6 +395,17 @@ export function MicroBench({
             if (part.kind === 'button') text = inputs.pressed[part.id] ? 'pressed' : 'hold to press'
             if (part.kind === 'resistor') text = formatOhms(part.props.ohms ?? BOARD.trayOhms)
             if (part.kind === 'led') text = `LED + 220 Ω · ${formatAmps(sol.leds[part.id]?.current ?? 0)}`
+            if (part.kind === 'tmp36') text = `${(inputs.temp?.[part.id] ?? 21).toFixed(1)} °C`
+            if (part.kind === 'servo') {
+              const a = sol.servos[part.id]?.angle
+              text = a === null || a === undefined ? 'servo · no signal' : `servo · ${Math.round(a)}°`
+            }
+            if (part.kind === 'motor') text = `${Math.round(Math.abs(frame.spin[part.id] ?? 0) * BOARD.motorRevsPerSec * 60)} rpm · ${formatAmps(sol.motors[part.id]?.current ?? 0)}`
+            if (part.kind === 'driver') {
+              const d = sol.drivers[part.id]
+              text = !d?.grounded ? 'driver · no shared GND' : !d.powered ? 'driver · no motor power' : `EN ${Math.round(d.enable * 100)}% · DIR ${d.dir ? 'HIGH' : 'LOW'}`
+            }
+            if (part.kind === 'encoder') text = `encoder · ${frame.ticks.D2 ?? 0} pulses`
             return (
               <text key={part.id} x={part.x + b.x + b.w / 2} y={part.y + b.y + b.h + 20} textAnchor="middle" fontSize="12" fontFamily="JetBrains Mono, monospace" fill="#8a9bb8" pointerEvents="none">
                 {text}

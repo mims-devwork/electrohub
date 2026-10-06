@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { CATALOG, CATALOG_BY_ID, HUB_BY_ID, LEVEL_BY_N } from '../../content'
+import { CATALOG, CATALOG_BY_ID, HUB_BY_ID, LEVELS } from '../../content'
+import { isItemDone, isLevelUnlocked } from '../../lib/progression'
 import type { CatalogComponent } from '../../content/types'
 import { useProgress } from '../../store/progress'
 import { ComponentViewer } from '../../three/ComponentViewer'
@@ -17,6 +18,8 @@ const GROUP_LABEL: Record<CatalogComponent['group'], string> = {
   connection: 'Connections',
   protection: 'Protection',
   computing: 'Computing',
+  sensing: 'Sensors',
+  motion: 'Motors',
 }
 
 export function ComponentsHub() {
@@ -26,8 +29,10 @@ export function ComponentsHub() {
   const inspect = useProgress((s) => s.inspect)
   const selected = CATALOG_BY_ID[componentId ?? ''] ?? CATALOG_BY_ID.led
   const [hotspot, setHotspot] = useState<string | null>(null)
-  const starter = LEVEL_BY_N[2].items.find((i) => i.type === 'collect')
-  const starterIds = starter?.type === 'collect' ? starter.componentIds : []
+  // Show the kit you're collecting now: the first unlocked, unfinished one (or the starter kit).
+  const kits = LEVELS.flatMap((l) => l.items.flatMap((i) => (i.type === 'collect' ? [{ level: l, kit: i }] : [])))
+  const kitNow = kits.find(({ level, kit }) => isLevelUnlocked(level.n, snap) && !isItemDone(kit, snap)) ?? kits[0]
+  const starterIds = kitNow.kit.componentIds
   const collected = snap.inspected.includes(selected.id)
   const activeHotspot = selected.hotspots.find((h) => h.id === hotspot)
 
@@ -42,7 +47,7 @@ export function ComponentsHub() {
       <div className="space-y-4">
         <div className="panel p-3">
           <div className="flex items-baseline justify-between text-xs">
-            <span className="font-semibold text-fog-100">Starter kit</span>
+            <span className="font-semibold text-fog-100">{kitNow.kit.title.replace(/^Inspect the /, '').replace(/^./, (c) => c.toUpperCase())}</span>
             <span className="font-mono text-fog-400">
               {starterIds.filter((id) => snap.inspected.includes(id)).length}/{starterIds.length}
             </span>
@@ -75,7 +80,7 @@ export function ComponentsHub() {
                           ✓
                         </span>
                       )}
-                      {!has && starterIds.includes(c.id) && <span className="h-1.5 w-1.5 rounded-full bg-flow" title="Part of the starter kit" />}
+                      {!has && starterIds.includes(c.id) && <span className="h-1.5 w-1.5 rounded-full bg-flow" title={`Part of the ${kitNow.kit.title.replace(/^Inspect the /, '')}`} />}
                     </button>
                   )
                 })}
@@ -166,7 +171,7 @@ export function ComponentsHub() {
           </LinkButton>
         )}
         <div className="pt-2">
-          <LevelBlock level={LEVEL_BY_N[2]} hub={HUB_BY_ID.components} />
+          <LevelBlock level={kitNow.level} hub={HUB_BY_ID[kitNow.level.hubId]} />
         </div>
         <Link to="/hub/circuits" className="block text-center text-xs text-flow hover:underline">
           Ready to wire them up? Go to the Circuit Lab →

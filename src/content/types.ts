@@ -3,6 +3,7 @@
 
 import type { MicroGoal } from '../micro/goals'
 import type { MicroPartKind, MicroSetup } from '../micro/types'
+import type { RobotGoal, RobotSetup } from '../robot/types'
 import type { Goal } from '../sim/goals'
 import type { Circuit, PartKind } from '../sim/types'
 
@@ -68,6 +69,18 @@ export type WidgetId =
   | 'pin-finder'
   | 'code-stepper'
   | 'pwm'
+  | 'sensor-sort'
+  | 'light-sensor'
+  | 'ultrasonic'
+  | 'uart'
+  | 'motor-load'
+  | 'h-bridge'
+  | 'servo-pulse'
+  | 'power-budget'
+  | 'regulator'
+  | 'protection'
+  | 'block-diagram'
+  | 'control-loop'
 
 export type LessonStep =
   | {
@@ -144,14 +157,21 @@ export interface MicroExperiment extends ExperimentBase {
   steps: ExperimentStep<MicroGoal, MicroPartKind>[]
 }
 
-export type Experiment = CircuitExperiment | MicroExperiment
+/** Runs in the robot arena: a whole robot driving round, with its code to tune. */
+export interface RobotExperiment extends ExperimentBase {
+  bench: 'robot'
+  setup: RobotSetup
+  steps: ExperimentStep<RobotGoal, never>[]
+}
+
+export type Experiment = CircuitExperiment | MicroExperiment | RobotExperiment
 
 export interface CatalogComponent {
   id: string
   name: string
   /** Technical name, introduced after the plain one. */
   technical: string
-  group: 'power' | 'passive' | 'semiconductor' | 'switching' | 'connection' | 'protection' | 'computing'
+  group: 'power' | 'passive' | 'semiconductor' | 'switching' | 'connection' | 'protection' | 'computing' | 'sensing' | 'motion'
   /** What is it? */
   what: string
   /** What does it do? */
@@ -183,6 +203,9 @@ export interface CatalogComponent {
     | 'button'
     | 'potentiometer'
     | 'mcu'
+    | 'motor'
+    | 'sensor'
+    | 'driver'
 }
 
 export interface CapstoneStage {

@@ -9,7 +9,7 @@ import type { LedColor } from '../sim/types'
 export type BoardPin = '5V' | 'GND' | 'A0' | 'D2' | 'D9' | 'D13' | 'GND2'
 
 /** Parts that can sit next to the board. */
-export type MicroPartKind = 'pot' | 'button' | 'led' | 'resistor'
+export type MicroPartKind = 'pot' | 'button' | 'led' | 'resistor' | 'tmp36' | 'servo' | 'motor' | 'driver' | 'battery' | 'encoder'
 
 export interface MicroPart {
   id: string
@@ -21,6 +21,8 @@ export interface MicroPart {
     ohms?: number
     /** led (module with its own 220 Ω resistor) */
     color?: LedColor
+    /** battery pack */
+    voltage?: number
   }
   /** Parts placed by an experiment that the learner may not delete. */
   locked?: boolean
@@ -35,7 +37,7 @@ export interface MicroWire {
   to: MicroRef
 }
 
-export type ProgramId = 'read-pot' | 'button-led' | 'dimmer'
+export type ProgramId = 'read-pot' | 'button-led' | 'dimmer' | 'temp' | 'servo' | 'motor' | 'encoder'
 
 export interface MicroSetup {
   parts: MicroPart[]
@@ -60,6 +62,10 @@ export interface MicroInputs {
   knob: Record<string, number>
   /** Button held down? */
   pressed: Record<string, boolean>
+  /** Temperature at each temperature sensor (°C). */
+  temp?: Record<string, number>
+  /** How fast each motor's shaft is actually turning, −1…1 of full speed (it lags behind the voltage). */
+  spin?: Record<string, number>
 }
 
 /** Output pin levels set by the program: 0 = LOW, 1 = HIGH, in between = PWM duty cycle. */

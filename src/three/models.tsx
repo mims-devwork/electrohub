@@ -441,6 +441,191 @@ export function PotModel() {
   )
 }
 
+/** TO-92 sensor (e.g. TMP36) with its name printed on the flat face. */
+export function To92SensorModel({ label = 'TMP36' }: { label?: string }) {
+  const tex = useLabelTexture(label, { bg: '#1c1c1c', fg: '#d4d4d8', font: '600 46px JetBrains Mono, monospace' })
+  return (
+    <group>
+      <TransistorModel />
+      <mesh position={[0, 0.5, 0.006]}>
+        <planeGeometry args={[0.6, 0.3]} />
+        <meshStandardMaterial map={tex} />
+      </mesh>
+    </group>
+  )
+}
+
+/** HC-SR04 ultrasonic distance sensor: two transducers on a blue board. */
+export function UltrasonicModel() {
+  const tex = useLabelTexture('HC-SR04', { bg: '#1e40af', fg: '#dbeafe', font: '700 40px JetBrains Mono, monospace' })
+  return (
+    <group position={[0, 0.2, 0]}>
+      <mesh castShadow>
+        <boxGeometry args={[2.3, 1.05, 0.08]} />
+        <meshStandardMaterial color="#1e40af" roughness={0.55} />
+      </mesh>
+      <mesh position={[0, 0.38, 0.045]}>
+        <planeGeometry args={[0.7, 0.18]} />
+        <meshStandardMaterial map={tex} />
+      </mesh>
+      {[-0.62, 0.62].map((x) => (
+        <group key={x} position={[x, -0.02, 0.04]}>
+          <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.22]} castShadow>
+            <cylinderGeometry args={[0.4, 0.4, 0.44, 32]} />
+            <meshStandardMaterial {...METAL} />
+          </mesh>
+          <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.445]}>
+            <cylinderGeometry args={[0.33, 0.33, 0.01, 32]} />
+            <meshStandardMaterial color="#27272a" roughness={0.9} />
+          </mesh>
+        </group>
+      ))}
+      {[-0.27, -0.09, 0.09, 0.27].map((x) => (
+        <Lead key={x} points={[[x, -0.52, 0], [x, -1.3, 0]]} radius={0.03} />
+      ))}
+    </group>
+  )
+}
+
+/** Hobby servo: blue case, mounting tabs, white horn and three coloured wires. */
+export function ServoModel() {
+  return (
+    <group position={[0, 0.1, 0]}>
+      <mesh castShadow>
+        <boxGeometry args={[1.6, 1.1, 0.8]} />
+        <meshStandardMaterial color="#1d4ed8" roughness={0.45} />
+      </mesh>
+      <mesh position={[0, 0.25, 0]} castShadow>
+        <boxGeometry args={[2.2, 0.08, 0.8]} />
+        <meshStandardMaterial color="#1e3a8a" roughness={0.5} />
+      </mesh>
+      <mesh position={[0.4, 0.62, 0]} castShadow>
+        <cylinderGeometry args={[0.18, 0.18, 0.16, 24]} />
+        <meshStandardMaterial color="#e5e7eb" />
+      </mesh>
+      <mesh position={[0.4, 0.72, 0]} rotation={[0, 0.5, 0]} castShadow>
+        <boxGeometry args={[1.1, 0.06, 0.16]} />
+        <meshStandardMaterial color="#f8fafc" roughness={0.4} />
+      </mesh>
+      {['#7c4a1e', '#dc2626', '#f97316'].map((c, i) => (
+        <Rod key={c} from={[-0.8, -0.3, -0.1 + i * 0.1]} to={[-1.6, -0.6, -0.1 + i * 0.1]} radius={0.035} color={c} metal={false} />
+      ))}
+    </group>
+  )
+}
+
+/** Yellow "TT" gear motor with a silver motor can and a white output shaft. */
+export function DcMotorModel() {
+  return (
+    <group position={[0, 0.3, 0]}>
+      <mesh castShadow>
+        <boxGeometry args={[1.4, 0.8, 0.75]} />
+        <meshStandardMaterial color="#eab308" roughness={0.5} />
+      </mesh>
+      <mesh position={[-1.1, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[0.36, 0.36, 0.8, 32]} />
+        <meshStandardMaterial {...METAL} />
+      </mesh>
+      {[-0.18, 0.18].map((z) => (
+        <mesh key={z} position={[-1.52, 0, z]}>
+          <boxGeometry args={[0.04, 0.16, 0.08]} />
+          <meshStandardMaterial color="#d4a62a" metalness={0.8} roughness={0.3} />
+        </mesh>
+      ))}
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[0.35, 0, side * 0.5]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[0.09, 0.09, 0.3, 16]} />
+          <meshStandardMaterial color="#f8fafc" />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/** A small H-bridge motor driver board. */
+export function MotorDriverModel() {
+  const chip = useLabelTexture('H-BRIDGE', { bg: '#141414', fg: '#9ca3af', font: '600 34px JetBrains Mono, monospace' })
+  return (
+    <group position={[0, 0.05, 0]}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[1.8, 0.08, 1.4]} />
+        <meshStandardMaterial color="#991b1b" roughness={0.55} />
+      </mesh>
+      <mesh position={[0, 0.1, 0]} castShadow>
+        <boxGeometry args={[0.6, 0.1, 0.45]} />
+        <meshStandardMaterial color="#141414" />
+      </mesh>
+      <mesh position={[0, 0.151, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[0.55, 0.2]} />
+        <meshStandardMaterial map={chip} />
+      </mesh>
+      {[-0.45, 0.45].map((z) => (
+        <mesh key={z} position={[0.72, 0.2, z]} castShadow>
+          <boxGeometry args={[0.3, 0.32, 0.36]} />
+          <meshStandardMaterial color="#2563eb" roughness={0.5} />
+        </mesh>
+      ))}
+      {[-0.42, -0.14, 0.14, 0.42].map((z) => (
+        <mesh key={z} position={[-0.78, 0.2, z]}>
+          <boxGeometry args={[0.06, 0.3, 0.06]} />
+          <meshStandardMaterial color="#d4a62a" metalness={0.8} roughness={0.3} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/** Two 18650 lithium-ion cells in a shrink-wrapped pack, with a red and a black lead. */
+export function LiIonPackModel() {
+  const tex = useLabelTexture('7.4V 2600mAh', { bg: '#0e7490', fg: '#ecfeff', font: '700 30px Inter, sans-serif' })
+  return (
+    <group position={[0, 0.35, 0]}>
+      {[-0.36, 0.36].map((z) => (
+        <mesh key={z} position={[0, 0, z]} rotation={[0, 0, Math.PI / 2]} castShadow>
+          <cylinderGeometry args={[0.36, 0.36, 2.2, 32]} />
+          <meshStandardMaterial color="#0e7490" roughness={0.35} />
+        </mesh>
+      ))}
+      <mesh position={[0, 0.37, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[1.2, 0.32]} />
+        <meshStandardMaterial map={tex} />
+      </mesh>
+      <Rod from={[1.1, 0.1, -0.1]} to={[1.7, -0.3, -0.1]} radius={0.04} color="#dc2626" metal={false} />
+      <Rod from={[1.1, 0.1, 0.1]} to={[1.7, -0.3, 0.1]} radius={0.04} color="#111827" metal={false} />
+    </group>
+  )
+}
+
+/** A switching ("buck") regulator module: inductor, capacitors and a chip on a small board. */
+export function BuckModel() {
+  return (
+    <group position={[0, 0.05, 0]}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[1.8, 0.08, 1.0]} />
+        <meshStandardMaterial color="#1d4ed8" roughness={0.55} />
+      </mesh>
+      <mesh position={[-0.15, 0.22, 0]} castShadow>
+        <boxGeometry args={[0.5, 0.36, 0.5]} />
+        <meshStandardMaterial color="#27272a" roughness={0.6} />
+      </mesh>
+      {[-0.65, 0.55].map((x) => (
+        <mesh key={x} position={[x, 0.3, 0.15]} castShadow>
+          <cylinderGeometry args={[0.16, 0.16, 0.5, 24]} />
+          <meshStandardMaterial color="#111827" roughness={0.4} />
+        </mesh>
+      ))}
+      <mesh position={[0.45, 0.1, -0.28]}>
+        <boxGeometry args={[0.3, 0.1, 0.22]} />
+        <meshStandardMaterial color="#141414" />
+      </mesh>
+      <mesh position={[0.75, 0.14, -0.3]} castShadow>
+        <boxGeometry args={[0.18, 0.18, 0.18]} />
+        <meshStandardMaterial color="#2563eb" />
+      </mesh>
+    </group>
+  )
+}
+
 export const MODEL_BY_ID: Record<string, ComponentType> = {
   battery: () => <BatteryModel />,
   resistor: () => <ResistorModel ohms={470} />,
@@ -456,6 +641,13 @@ export const MODEL_BY_ID: Record<string, ComponentType> = {
   fuse: FuseModel,
   regulator: () => <To220Model label="L7805" />,
   potentiometer: PotModel,
+  'temp-sensor': () => <To92SensorModel label="TMP36" />,
+  ultrasonic: UltrasonicModel,
+  servo: ServoModel,
+  'dc-motor': DcMotorModel,
+  'motor-driver': MotorDriverModel,
+  'li-ion': LiIonPackModel,
+  buck: BuckModel,
   microcontroller: () => (
     <group position={[0, -0.35, 0]}>
       <DevBoard ledOn />

@@ -74,6 +74,61 @@ export const MICRO_PART_DEFS: Record<MicroPartKind, { name: string; terminals: M
       { name: 'b', dx: 52, dy: 0, label: '', hint: 'Resistor leg. Resistors work the same in either direction.' },
     ],
   },
+  tmp36: {
+    name: 'Temperature sensor',
+    catalogId: 'temp-sensor',
+    terminals: [
+      { name: 'vs', dx: -48, dy: -26, label: '+', hint: 'The + leg (+Vs): power for the sensor. Connect it to 5V.' },
+      { name: 'out', dx: -48, dy: 0, label: 'OUT', hint: 'Vout: 0.5 V at 0 °C, rising 10 mV for every degree. Connect it to an analog pin.' },
+      { name: 'gnd', dx: -48, dy: 26, label: '−', hint: 'The − leg: connect it to GND.' },
+    ],
+  },
+  servo: {
+    name: 'Servo',
+    catalogId: 'servo',
+    terminals: [
+      { name: 'gnd', dx: -70, dy: -26, label: '−', hint: 'Brown wire: ground. Connect it to GND.' },
+      { name: 'pwr', dx: -70, dy: 0, label: '+', hint: 'Red wire: power for the servo’s motor. Connect it to 5V.' },
+      { name: 'sig', dx: -70, dy: 26, label: 'SIG', hint: 'Orange wire: the signal. Pulses on this wire tell the servo which angle to point at.' },
+    ],
+  },
+  motor: {
+    name: 'DC motor',
+    catalogId: 'dc-motor',
+    terminals: [
+      { name: 'a', dx: -62, dy: -14, label: '', hint: 'Motor terminal. Swap the two wires and the motor spins the other way.' },
+      { name: 'b', dx: -62, dy: 14, label: '', hint: 'Motor terminal. Swap the two wires and the motor spins the other way.' },
+    ],
+  },
+  driver: {
+    name: 'Motor driver',
+    catalogId: 'motor-driver',
+    terminals: [
+      { name: 'en', dx: -76, dy: -42, label: 'EN', hint: 'EN (enable): HIGH lets power through to the motor. PWM here sets the speed.' },
+      { name: 'dir', dx: -76, dy: -14, label: 'DIR', hint: 'DIR (direction): LOW spins the motor one way, HIGH the other way.' },
+      { name: 'gnd', dx: -76, dy: 14, label: 'GND', hint: 'GND: shared by the board, the driver and the battery −. Without it, EN and DIR mean nothing.' },
+      { name: 'vm', dx: -76, dy: 42, label: 'VM', hint: 'VM (motor power): the battery + goes here. The motor’s big current comes from this pin, not from the board.' },
+      { name: 'oa', dx: 76, dy: -16, label: 'A', hint: 'Motor output A. Connect it to one motor terminal.' },
+      { name: 'ob', dx: 76, dy: 16, label: 'B', hint: 'Motor output B. Connect it to the other motor terminal.' },
+    ],
+  },
+  battery: {
+    name: 'Battery pack',
+    catalogId: 'battery',
+    terminals: [
+      { name: 'pos', dx: -82, dy: -12, label: '+', hint: 'Battery +: power for the motors. Connect it to the driver’s VM.' },
+      { name: 'neg', dx: -82, dy: 12, label: '−', hint: 'Battery −: connect it to GND, so the battery, driver and board share one 0 V.' },
+    ],
+  },
+  encoder: {
+    name: 'Wheel encoder',
+    catalogId: 'dc-motor',
+    terminals: [
+      { name: 'vcc', dx: -54, dy: -26, label: '+', hint: 'Power for the encoder’s light sensor. Connect it to 5V.' },
+      { name: 'gnd', dx: -54, dy: 0, label: '−', hint: 'Encoder ground. Connect it to GND.' },
+      { name: 'out', dx: -54, dy: 26, label: 'OUT', hint: 'One pulse every time a slot in the wheel passes the sensor. Connect it to D2, which can count pulses.' },
+    ],
+  },
 }
 
 export function microTerminals(part: MicroPart): MicroRef[] {
@@ -105,6 +160,30 @@ export const BOARD = {
   ledOhms: 220,
   /** Pull-down/pull-up resistor offered in the parts tray (Ω). */
   trayOhms: 10000,
+  /** TMP36: 0.5 V at 0 °C, plus 10 mV per °C. */
+  tmpOffset: 0.5,
+  tmpPerDegree: 0.01,
+  /** A servo's motor and electronics, seen from its power wires (Ω). */
+  servoOhms: 50,
+  /** A small DC gear motor's winding resistance (Ω). */
+  motorOhms: 6,
+  /** Below this a motor can't overcome its own friction (V). */
+  motorStartVolts: 0.8,
+  /** Voltage that counts as "full speed" for our 6 V motor, after the driver's losses (V). */
+  motorFullVolts: 5.3,
+  /** Full speed, in wheel turns per second. */
+  motorRevsPerSec: 3,
+  /** How quickly the shaft catches up with the voltage (s). */
+  motorLag: 0.25,
+  /** Resistance of each switch inside the motor driver (Ω). */
+  driverOhms: 0.2,
+  /** Default battery pack: 4 × AA. */
+  batteryVolts: 6,
+  batteryOhms: 0.3,
+  /** Slots in the encoder disc: pulses per wheel turn. */
+  encoderSlots: 20,
+  /** Wheel travel per encoder pulse (cm): a 6.4 cm wheel goes about 20 cm per turn. */
+  cmPerTick: 1,
 }
 
 export const BENCH_W = 860

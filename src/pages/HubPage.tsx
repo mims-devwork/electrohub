@@ -10,8 +10,8 @@ import { CircuitsHub } from './hubs/CircuitsHub'
 import { ComponentsHub } from './hubs/ComponentsHub'
 import { ElectricityHub } from './hubs/ElectricityHub'
 import { MicroHub } from './hubs/MicroHub'
+import { RoboticsHub } from './hubs/RoboticsHub'
 import { PcbPreview } from './previews/PcbPreview'
-import { RoboticsPreview } from './previews/RoboticsPreview'
 import { PreviewBanner } from './hubs/shared'
 
 export function HubPage() {
@@ -47,7 +47,7 @@ export function HubPage() {
         {hub.id === 'components' && <ComponentsHub />}
         {hub.id === 'circuits' && <CircuitsHub hub={hub} />}
         {hub.id === 'microcontrollers' && <MicroHub hub={hub} />}
-        {hub.id === 'robotics' && <RoboticsPreview />}
+        {hub.id === 'robotics' && <RoboticsHub hub={hub} />}
         {hub.id === 'pcb' && <PcbPreview />}
       </div>
     </div>

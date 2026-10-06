@@ -3,10 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { LabWorkspace } from '../circuit/LabWorkspace'
 import { useCircuit } from '../circuit/useCircuit'
 import { EXPERIMENT_BY_ID, HUB_BY_ID, LEVEL_BY_N } from '../content'
-import type { CircuitExperiment, Experiment, MicroExperiment } from '../content/types'
-import { emptyButtonLed, emptyMicroHistory, microGoalMet, updateMicroHistory, type MicroHistory } from '../micro/goals'
+import type { CircuitExperiment, Experiment, MicroExperiment, RobotExperiment } from '../content/types'
+import { emptyMicroHistory, freshObservations, microGoalMet, updateMicroHistory, type MicroHistory } from '../micro/goals'
 import { MicroWorkspace } from '../micro/MicroWorkspace'
 import { useMicro } from '../micro/useMicro'
+import { robotGoalMet } from '../robot/goals'
+import { RobotWorkspace } from '../robot/RobotWorkspace'
+import { useRobot } from '../robot/useRobot'
 import { isLevelComplete, isLevelUnlocked, nextAction } from '../lib/progression'
 import { emptyHistory, goalMet, updateHistory, type GoalHistory } from '../sim/goals'
 import { formatAmps } from '../sim/parts'
@@ -23,13 +26,14 @@ export function ExperimentPage() {
   if (!exp) return <NotFoundBlock what="experiment" />
   if (exp.status !== 'ready') return <PlannedExperiment exp={exp} />
   if (exp.bench === 'micro') return <MicroExperimentRunner key={exp.id} exp={exp} />
+  if (exp.bench === 'robot') return <RobotExperimentRunner key={exp.id} exp={exp} />
   return <ExperimentRunner key={exp.id} exp={exp} />
 }
 
 const num = (n: number) => String(n).padStart(2, '0')
 
 /** Which lab an experiment's bench belongs to. */
-const benchHub = (exp: Experiment) => (exp.bench === 'micro' ? HUB_BY_ID.microcontrollers : HUB_BY_ID.circuits)
+const benchHub = (exp: Experiment) => (exp.bench === 'circuit' || !exp.bench ? HUB_BY_ID.circuits : HUB_BY_ID[LEVEL_BY_N[exp.levelN].hubId])
 
 /** Step bookkeeping shared by every kind of bench. */
 function useSteps(exp: Experiment) {
@@ -231,13 +235,13 @@ function MicroExperimentRunner({ exp }: { exp: MicroExperiment }) {
 
   // What the LED did with old code, or in an earlier step, doesn't count as evidence now.
   useEffect(() => {
-    setHistory((h) => ({ ...h, buttonLed: emptyButtonLed(), ledMin: 1, ledMax: 0 }))
+    setHistory(freshObservations)
   }, [api.uploads, stepIdx])
 
   const met = useStepGoal(stepIdx, finished, microGoalMet(step.goal, api.circuit, api.inputs, api.frame, history))
 
   const side = finished ? (
-    <FinishedPanel exp={exp} freeBuild={{ to: '/hub/microcontrollers', label: 'Free play' }} />
+    <FinishedPanel exp={exp} freeBuild={{ to: `/hub/${LEVEL_BY_N[exp.levelN].hubId}`, label: 'Free play' }} />
   ) : (
     <StepPanel key={stepIdx} exp={exp} stepIdx={stepIdx} met={met} onNext={next} />
   )
@@ -253,6 +257,25 @@ function MicroExperimentRunner({ exp }: { exp: MicroExperiment }) {
           setHistory(emptyMicroHistory())
         }}
       />
+    </ExperimentFrame>
+  )
+}
+
+function RobotExperimentRunner({ exp }: { exp: RobotExperiment }) {
+  const api = useRobot(exp.setup)
+  const { stepIdx, current, finished, next } = useSteps(exp)
+  const step = exp.steps[current]
+  const met = useStepGoal(stepIdx, finished, robotGoalMet(step.goal, api.tick.state, api.arena.id))
+
+  const side = finished ? (
+    <FinishedPanel exp={exp} freeBuild={{ to: `/hub/${LEVEL_BY_N[exp.levelN].hubId}`, label: 'Free play' }} />
+  ) : (
+    <StepPanel key={stepIdx} exp={exp} stepIdx={stepIdx} met={met} onNext={next} />
+  )
+
+  return (
+    <ExperimentFrame exp={exp} finished={finished}>
+      <RobotWorkspace api={api} side={side} onReset={api.reset} />
     </ExperimentFrame>
   )
 }

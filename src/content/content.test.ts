@@ -51,7 +51,7 @@ describe('content integrity', () => {
   it('levels are ready in order, with no gaps', () => {
     const firstPlanned = LEVELS.findIndex((l) => l.status === 'planned')
     expect(LEVELS.slice(firstPlanned).every((l) => l.status === 'planned')).toBe(true)
-    expect(firstPlanned).toBe(5)
+    expect(firstPlanned).toBe(9)
   })
 })
 

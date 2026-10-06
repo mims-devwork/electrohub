@@ -14,9 +14,16 @@ const SCOPE_SAMPLES = 90
 /** How long "uploading" takes after the code changes (ms). */
 const UPLOAD_MS = 900
 
+/** Room temperature, and roughly the temperature of fingers wrapped round a sensor (°C). */
+const ROOM_C = 21
+const FINGERS_C = 33
+/** How quickly a sensor warms up or cools down (s). */
+const WARM_LAG = 3
+
 const initialInputs = (setup: MicroSetup): MicroInputs => ({
   knob: Object.fromEntries(setup.parts.filter((p) => p.kind === 'pot').map((p) => [p.id, setup.knob ?? 0.5])),
   pressed: {},
+  temp: Object.fromEntries(setup.parts.filter((p) => p.kind === 'tmp36').map((p) => [p.id, ROOM_C])),
 })
 
 /** What the scope shows for a pin: what the program read, what it wrote, or the raw voltage. */
@@ -34,6 +41,10 @@ export function useMicro(setup: MicroSetup) {
   const [inputs, setInputs] = useState<MicroInputs>(() => initialInputs(setup))
   const [slots, setSlots] = useState(() => defaultSlots(setup.program, setup.slots))
   const [uploading, setUploading] = useState(false)
+  /** Why the board is busy: new code, or someone pressed its reset button. */
+  const [bootReason, setBootReason] = useState<'upload' | 'reset'>('upload')
+  /** Sensors being held between someone's fingers. */
+  const warm = useRef<Record<string, boolean>>({})
   /** Bumped every time new code finishes uploading. */
   const [uploads, setUploads] = useState(0)
   const mem = useRef(emptyMemory())
@@ -50,7 +61,25 @@ export function useMicro(setup: MicroSetup) {
     let ticks = 0
     const t = setInterval(() => {
       const s = live.current
-      const f = runFrame(s.circuit, s.inputs, setup.program, s.slots, s.frame.outputs, mem.current, Math.random, s.uploading)
+      // Held sensors warm up towards finger temperature; let go and they cool back to the room.
+      const temps = s.inputs.temp ?? {}
+      const ease = 1 - Math.exp(-(TICK_MS / 1000) / WARM_LAG)
+      let warmed = false
+      const nextTemps = Object.fromEntries(
+        s.circuit.parts
+          .filter((p) => p.kind === 'tmp36')
+          .map((p) => {
+            const now = temps[p.id] ?? ROOM_C
+            const next = now + ((warm.current[p.id] ? FINGERS_C : ROOM_C) - now) * ease
+            if (Math.abs(next - now) > 0.002) warmed = true
+            return [p.id, next]
+          }),
+      )
+      if (warmed) {
+        s.inputs = { ...s.inputs, temp: nextTemps }
+        setInputs((i) => ({ ...i, temp: nextTemps }))
+      }
+      const f = runFrame(s.circuit, s.inputs, setup.program, s.slots, s.frame.outputs, mem.current, Math.random, s.uploading, TICK_MS / 1000)
       live.current.frame = f
       setFrame(f)
       setScope((h) => [...h.slice(1), Object.fromEntries(setup.scope.map((pin) => [pin, scopeSample(f, pin)]))])
@@ -75,8 +104,20 @@ export function useMicro(setup: MicroSetup) {
   const setSlot = (id: string, value: string) => {
     if (slots[id] === value) return
     setSlots((s) => ({ ...s, [id]: value }))
+    setBootReason('upload')
     setUploading(true)
     setSerial([])
+  }
+
+  /** Press the board's reset button: the program starts again from setup(), with fresh variables. */
+  const restart = () => {
+    setBootReason('reset')
+    setUploading(true)
+    setSerial([])
+  }
+
+  const setWarm = (id: string, held: boolean) => {
+    warm.current = { ...warm.current, [id]: held }
   }
 
   const setKnob = useCallback((id: string, pos: number) => setInputs((i) => ({ ...i, knob: { ...i.knob, [id]: Math.min(1, Math.max(0, pos)) } })), [])
@@ -101,7 +142,8 @@ export function useMicro(setup: MicroSetup) {
 
   const addPart = (kind: MicroPartKind, x: number, y: number) => {
     const id = nextId(kind === 'resistor' ? 'r' : kind)
-    const part: MicroPart = { id, kind, x, y, props: kind === 'resistor' ? { ohms: BOARD.trayOhms } : {} }
+    const props: MicroPart['props'] = kind === 'resistor' ? { ohms: BOARD.trayOhms } : kind === 'battery' ? { voltage: BOARD.batteryVolts } : {}
+    const part: MicroPart = { id, kind, x, y, props }
     setCircuit((c) => ({ ...c, parts: [...c.parts, part] }))
     if (kind === 'pot') setKnob(id, 0.5)
     return id
@@ -124,6 +166,7 @@ export function useMicro(setup: MicroSetup) {
     setUploading(false)
     setSerial([])
     mem.current = emptyMemory()
+    warm.current = {}
   }
 
   return {
@@ -134,11 +177,14 @@ export function useMicro(setup: MicroSetup) {
     frame,
     slots,
     uploading,
+    bootReason,
     uploads,
     serial,
     scope,
     issues,
     setSlot,
+    restart,
+    setWarm,
     setKnob,
     setPressed,
     addWire,

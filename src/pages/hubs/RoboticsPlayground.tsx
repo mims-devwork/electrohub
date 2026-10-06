@@ -174,7 +174,8 @@ const Arrow = ({ active }: { active?: boolean }) => (
   </div>
 )
 
-export function RoboticsPreview() {
+/** Free play: the obstacle-avoiding robot in 3D, with its live block diagram. */
+export function RoboticsPlayground() {
   const stateRef = useRef<RobotState>({ x: -1, z: -2.5, heading: 0.3, mode: 'forward', turnDir: 1, cm: 100, left: 1, right: 1 })
   const [threshold, setThreshold] = useState(35)
   const [sensorOn, setSensorOn] = useState(true)
@@ -197,10 +198,10 @@ export function RoboticsPreview() {
       : `Clear (${Math.round(view.cm)} cm) → DRIVE FORWARD`
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-      <div className="space-y-3">
-        <SectionTitle eyebrow="Preview · Levels 6–9" title="How a robot actually works">
-          Sensor → microcontroller → decision → motor driver → motors, running live. This is Experiment 11, the obstacle-avoiding robot, and you’ll build the electronics for it yourself.
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="min-w-0 space-y-3">
+        <SectionTitle eyebrow="Free play" title="How a robot actually works">
+          Sensor → microcontroller → decision → motor driver → motors, running live in 3D. It’s the robot from Experiment 11. Change its decision rule, or unplug its sensor, and watch what happens.
         </SectionTitle>
         <div className="relative h-[440px] overflow-hidden rounded-2xl border border-ink-700">
           <Canvas shadows dpr={[1, 2]} camera={{ position: [0, 7.6, 6.4], fov: 45 }}>

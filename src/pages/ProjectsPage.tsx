@@ -66,7 +66,7 @@ export function ProjectsPage() {
                 You’ll learn this in <span className="text-fog-200">Level {block.level}: {LEVEL_BY_N[block.level].title}</span>.
               </p>
               <Link to="/hub/robotics" className="mt-3 inline-block text-sm text-flow hover:underline">
-                See it running in the Robotics preview →
+                See it running in the Robotics Lab →
               </Link>
             </div>
           </div>

@@ -54,7 +54,7 @@ export const HUBS: Hub[] = [
     unlockLevel: 6,
     chainLabel: 'Sensors · Motors · Power',
     topics: ['Sensors', 'DC motors', 'Servos', 'Steppers', 'Motor drivers', 'Encoders', 'Power systems', 'Robot control'],
-    status: 'preview',
+    status: 'open',
   },
   {
     id: 'pcb',
